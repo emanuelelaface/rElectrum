@@ -11,4 +11,6 @@ Many mobile browsers do not allow the use of the camera on an unsafe connection,
 - encryption of the wallet (but is needed?)
 - front/rear camera selector
 
-<img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screen-shot1.png></img>
+<img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screen-shot-1.png></img>
+<img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screen-shot-2.png></img>
+<img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screen-shot-3.png></img>
