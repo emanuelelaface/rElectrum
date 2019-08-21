@@ -6,5 +6,9 @@ Many mobile browsers do not allow the use of the camera on an unsafe connection,
 
 ### Todo
 
+- the send and receive functions are not yet implemented
+- spinning wheel during menu transitions
+- encryption of the wallet (but is needed?)
+- front/rear camera selector
 
 <img src=https://github.com/emanuelelaface/LaTeXBot/blob/master/screen-shot.png></img>
