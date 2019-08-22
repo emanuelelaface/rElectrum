@@ -7,7 +7,6 @@ Many mobile browsers do not allow the use of the camera on an unsafe connection,
 ### Todo
 
 - the send function is not yet implemented
-- spinning wheel during menu transitions
 - encryption of the wallet (but is needed?)
 
 <img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screen-shot-1.png></img>

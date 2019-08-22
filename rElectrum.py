@@ -1,3 +1,5 @@
+#!/usr/bin/python3.7
+
 import ssl
 import os
 import io
@@ -93,6 +95,7 @@ class rElectrum(App):
         image = Image.open(io.BytesIO(img_data))
         qr_code_list = decode(image)
         if len(qr_code_list)>0 and self.qr_code_reason == 'new wallet':
+            self.execute_javascript('document.getElementById("spinner").style.display=""')
             qr_code_data = qr_code_list[0][0].decode('utf-8')
             self.qr_log.set_text('Pub Key Detected')
             try:
@@ -153,7 +156,9 @@ class rElectrum(App):
             self.qr_button_confirm.set_style({'color': 'black'})
 
     def switch_to_add_wallet_page(self, widget):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
         self.set_root_widget(self.add_wallet_page)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
         self.execute_javascript("""
             const video = document.querySelector('video');
             video.setAttribute("playsinline", true);
@@ -203,6 +208,8 @@ class rElectrum(App):
         self.page.children['head'].add_child('apple-152', '<link rel="apple-touch-icon" sizes="152x152" href="/my_res:icon@152.png">')
         self.page.children['head'].add_child('apple-180', '<link rel="apple-touch-icon" sizes="180x180" href="/my_res:icon@180.png">')
         self.page.children['head'].add_child('apple-192', '<link rel="icon" sizes="192x192" href="/my_res:icon@192.png">')
+        self.page.children['head'].add_child('css-spin', '<style type="text/css">body>div { box-shadow: 0 0px 0px 0 rgba(0, 0, 0, 0), 0 0px 0px 0 rgba(0, 0, 0, 0), 0 0px 0px 0px rgba(0, 0, 0, 0); } div { background-color: rgba(0,0,0,0); } .lds-ripple { margin-left: -32px;  margin-top: 13px; display: inline-block; position: absolute; width: 64px; height: 64px; } .lds-ripple div { position: absolute; border: 4px solid #fff; opacity: 1; border-radius: 50%; animation: lds-ripple 1s cubic-bezier(0, 0.2, 0.8, 1) infinite; } .lds-ripple div:nth-child(2) { animation-delay: -0.5s; } @keyframes lds-ripple { 0% { top: 28px; left: 28px; width: 0; height: 0; opacity: 1; } 100% { top: -1px; left: -1px; width: 58px; height: 58px; opacity: 0; } } </style>')
+        self.page.children['body'].add_child('div-spin', '<center><div id="spinner" class="lds-ripple"> <div> </div> <div> </div></div></center>')
 
         self.logo = gui.Image('/my_res:relectrum-logo.png', height=70, margin='10px')
         self.back_button=gui.Label('Back', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
@@ -229,6 +236,7 @@ class rElectrum(App):
             params['timezone'] = tz;
             sendCallbackParam('%(id)s','set_timezone',params);
         """%{'id':str(id(self))})
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def idle(self):
         if self.userdir != '':
@@ -239,6 +247,7 @@ class rElectrum(App):
                     video.srcObject.getTracks()[0].stop();
                 """)
                 self.set_root_widget(self.wallet_list_page)
+                self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
         if int(time.time())%10 == 0: # Check the wallet balance every 10 seconds.
             for wallet in self.wallets_list:
@@ -247,6 +256,7 @@ class rElectrum(App):
                 self.buttons[wallet]['row2'].set_text('\U00002714 '+str(wallet_balance[0]/unit)+' \U000023F3 '+str(wallet_balance[1]/unit))
 
     def go_to_wallet(self, widget, *args):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
         wallet = args[0]
         tx_list=[]
         row_count=0
@@ -300,24 +310,28 @@ class rElectrum(App):
         single_wallet_widgets.append(delete_button)
         self.single_wallet_page = gui.VBox(children=single_wallet_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
         self.set_root_widget(self.single_wallet_page)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def go_back_main(self, widget):
         self.set_root_widget(self.wallet_list_page)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def go_back_single_wallet(self, widget):
         self.set_root_widget(self.single_wallet_page)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def go_to_receive(self, widget, wallet):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
         receive_widgets = []
         receive_widgets.append(self.logo)
         for address in self.wallets_list[wallet].wallet.get_addresses():
             addr_hist = self.wallets_list[wallet].wallet.get_address_history_len(address)
             addr_balance = self.wallets_list[wallet].wallet.get_addr_balance(address)
             if addr_hist>0:
-                button_row1=gui.Label(address, style={'font-size':'16px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'aqua', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
+                button_row1=gui.Label(address, style={'font-size':'14px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'aqua', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
                 button_row2=gui.Label('Used: '+str(addr_hist)+' times \U00002714 '+str(addr_balance[0]/unit)+' \U000023F3 '+str(addr_balance[1]/unit), style={'font-size':'14px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'aqua', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
             else:
-                button_row1=gui.Label(address, style={'font-size':'16px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
+                button_row1=gui.Label(address, style={'font-size':'14px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
                 button_row2=gui.Label('Used: '+str(addr_hist)+' times \U00002714 '+str(addr_balance[0]/unit)+' \U000023F3 '+str(addr_balance[1]/unit), style={'font-size':'14px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
 
             button_row1.onclick.do(self.addr_to_qr, address)
@@ -327,8 +341,10 @@ class rElectrum(App):
         receive_widgets.append(self.back_button)
         receive_page = gui.VBox(children=receive_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
         self.set_root_widget(receive_page)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def addr_to_qr(self, widget, address):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
         atq_widgets = []
         atq_widgets.append(self.logo)
 
@@ -340,19 +356,24 @@ class rElectrum(App):
         atq_widgets.append(self.back_button)
         atq_page = gui.VBox(children=atq_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
         self.set_root_widget(atq_page)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def go_to_send(self, widget, wallet):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
         send_widgets = []
         send_widgets.append(self.logo)
         send_widgets.append(self.back_button)
         send_page = gui.VBox(children=send_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
         self.set_root_widget(send_page)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def delete_wallet(self, widget, *args):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
         wallet = args[0]
         def confirm(widget):
             os.remove(self.userdir+'/'+wallet)
             self.set_root_widget(self.wallet_list_page)
+            self.execute_javascript('document.getElementById("spinner").style.display="none"')
         delete_wallet_widgets=[]
         delete_wallet_widgets.append(self.logo)
         delete_wallet_widgets.append(gui.Label('Deleting Wallet', style={'font-size':'20px', 'text-align':'center', 'margin':'5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '100%', 'background-color':'#F71200', 'border-radius': '0px 0px 0px 0px', 'border-style':'none'}))
@@ -365,11 +386,12 @@ class rElectrum(App):
         delete_wallet_widgets.append(cancel_button)
         delete_wallet_page = gui.VBox(children=delete_wallet_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
         self.set_root_widget(delete_wallet_page)
-
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def get_tx_info(self, table, row, item):
         if not hasattr(row, 'tx_details'):
             return
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
         tx_info_widgets = []
         tx_info_widgets.append(self.logo)
 
@@ -431,6 +453,7 @@ class rElectrum(App):
         tx_info_widgets.append(self.back_button)
         tx_info_page = gui.VBox(children=tx_info_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
         self.set_root_widget(tx_info_page)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
         return
 
