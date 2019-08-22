@@ -2,6 +2,8 @@ import ssl
 import os
 import io
 import time
+import base64
+from io import BytesIO
 from PIL import Image
 import remi.gui as gui
 from remi import start, App
@@ -13,6 +15,7 @@ from electrum.wallet import restore_wallet_from_text
 from wallet_functions import WalletInterface
 import asyncio
 import pytz
+import qrcode
 from datetime import datetime
 
 unit = 1e8 # BTC
@@ -155,10 +158,9 @@ class rElectrum(App):
             const video = document.querySelector('video');
             video.setAttribute("playsinline", true);
             const canvas = document.querySelector('canvas');
-            navigator.mediaDevices.getUserMedia({video: true , audio: false, facingMode: { exact: "environment" } }).
+            navigator.mediaDevices.getUserMedia({video: { facingMode: { exact: "environment" } }, audio: false}).
                 then((stream) => {video.srcObject = stream});
         """)
-            #navigator.mediaDevices.getUserMedia({video: { facingMode: { exact: "environment" } }, audio: false}).
 
     def main_page(self):
         if self.userdir != '':
@@ -203,6 +205,8 @@ class rElectrum(App):
         self.page.children['head'].add_child('apple-192', '<link rel="icon" sizes="192x192" href="/my_res:icon@192.png">')
 
         self.logo = gui.Image('/my_res:relectrum-logo.png', height=70, margin='10px')
+        self.back_button=gui.Label('Back', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
+        self.back_button.onclick.do(self.go_back_main)
         self.main_page()
         self.add_wallet_page()
 
@@ -282,12 +286,16 @@ class rElectrum(App):
 
         single_wallet_widgets = []
         single_wallet_widgets.append(self.logo)
+        
+        receive_button=gui.Label('Receive BTC', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
+        receive_button.onclick.do(self.go_to_receive, wallet)
+        send_button=gui.Label('Send BTC', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
+        single_wallet_widgets.append(gui.HBox(children=[receive_button, send_button], style={'margin':'0px auto', 'width':'100%', 'background-color':'#1A222C'}))
+
         single_wallet_widgets.append(tx_table)
-        back_button=gui.Label('Back', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
-        back_button.onclick.do(self.go_back_main)
         delete_button=gui.Label('Delete Wallet', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#F71200', 'border-radius': '20px 20px 20px 20px'})
         delete_button.onclick.do(self.delete_wallet, wallet)
-        single_wallet_widgets.append(back_button)
+        single_wallet_widgets.append(self.back_button)
         single_wallet_widgets.append(delete_button)
         self.single_wallet_page = gui.VBox(children=single_wallet_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
         self.set_root_widget(self.single_wallet_page)
@@ -298,13 +306,45 @@ class rElectrum(App):
     def go_back_single_wallet(self, widget):
         self.set_root_widget(self.single_wallet_page)
 
+    def go_to_receive(self, widget, wallet):
+        receive_widgets = []
+        receive_widgets.append(self.logo)
+        for address in self.wallets_list[wallet].wallet.get_addresses():
+            addr_hist = self.wallets_list[wallet].wallet.get_address_history_len(address)
+            addr_balance = self.wallets_list[wallet].wallet.get_addr_balance(address)
+            if addr_hist>0:
+                button_row1=gui.Label(address, style={'font-size':'16px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'aqua', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
+                button_row2=gui.Label('Used: '+str(addr_hist)+' times \U00002714 '+str(addr_balance[0]/unit)+' \U000023F3 '+str(addr_balance[1]/unit), style={'font-size':'14px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'aqua', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
+            else:
+                button_row1=gui.Label(address, style={'font-size':'16px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
+                button_row2=gui.Label('Used: '+str(addr_hist)+' times \U00002714 '+str(addr_balance[0]/unit)+' \U000023F3 '+str(addr_balance[1]/unit), style={'font-size':'14px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
+
+            button_row1.onclick.do(self.addr_to_qr, address)
+            button_row2.onclick.do(self.addr_to_qr, address)
+            receive_widgets.append(button_row1)
+            receive_widgets.append(button_row2)
+        receive_widgets.append(self.back_button)
+        receive_page = gui.VBox(children=receive_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
+        self.set_root_widget(receive_page)
+
+    def addr_to_qr(self, widget, address):
+        atq_widgets = []
+        atq_widgets.append(self.logo)
+
+        image = qrcode.make(address)
+        buffered = BytesIO()
+        image.save(buffered, format="PNG")
+
+        atq_widgets.append(gui.Image('data:image/png;base64, '+(base64.b64encode(buffered.getvalue())).decode('utf-8')))
+        atq_widgets.append(self.back_button)
+        atq_page = gui.VBox(children=atq_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
+        self.set_root_widget(atq_page)
+
     def delete_wallet(self, widget, *args):
         wallet = args[0]
-
         def confirm(widget):
             os.remove(self.userdir+'/'+wallet)
             self.set_root_widget(self.wallet_list_page)
-
         delete_wallet_widgets=[]
         delete_wallet_widgets.append(self.logo)
         delete_wallet_widgets.append(gui.Label('Deleting Wallet', style={'font-size':'20px', 'text-align':'center', 'margin':'5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '100%', 'background-color':'#F71200', 'border-radius': '0px 0px 0px 0px', 'border-style':'none'}))
@@ -380,9 +420,7 @@ class rElectrum(App):
         tx_info_widgets[-1].style['padding']='0px 20px 5px 20px'
         tx_info_widgets[-1].style['border-radius']='0px 0px 20px 20px'
 
-        back_button=gui.Label('Back', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
-        back_button.onclick.do(self.go_back_single_wallet)
-        tx_info_widgets.append(back_button)
+        tx_info_widgets.append(self.back_button)
         tx_info_page = gui.VBox(children=tx_info_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
         self.set_root_widget(tx_info_page)
 
@@ -400,3 +438,5 @@ if __name__ == "__main__":
             start_browser=False,
             debug=False,
             update_interval = 0.1)
+
+
