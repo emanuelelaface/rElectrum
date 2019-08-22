@@ -158,7 +158,7 @@ class rElectrum(App):
             const video = document.querySelector('video');
             video.setAttribute("playsinline", true);
             const canvas = document.querySelector('canvas');
-            navigator.mediaDevices.getUserMedia({video: { facingMode: { exact: "environment" } }, audio: false}).
+            navigator.mediaDevices.getUserMedia({video: { facingMode: { ideal: "environment" } }, audio: false}).
                 then((stream) => {video.srcObject = stream});
         """)
 
@@ -290,6 +290,7 @@ class rElectrum(App):
         receive_button=gui.Label('Receive BTC', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
         receive_button.onclick.do(self.go_to_receive, wallet)
         send_button=gui.Label('Send BTC', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
+        send_button.onclick.do(self.go_to_send, wallet)
         single_wallet_widgets.append(gui.HBox(children=[receive_button, send_button], style={'margin':'0px auto', 'width':'100%', 'background-color':'#1A222C'}))
 
         single_wallet_widgets.append(tx_table)
@@ -339,6 +340,13 @@ class rElectrum(App):
         atq_widgets.append(self.back_button)
         atq_page = gui.VBox(children=atq_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
         self.set_root_widget(atq_page)
+
+    def go_to_send(self, widget, wallet):
+        send_widgets = []
+        send_widgets.append(self.logo)
+        send_widgets.append(self.back_button)
+        send_page = gui.VBox(children=send_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
+        self.set_root_widget(send_page)
 
     def delete_wallet(self, widget, *args):
         wallet = args[0]
