@@ -26,10 +26,10 @@ from datetime import datetime
 
 unit = 1e8 # BTC
 
-#config = SimpleConfig({"testnet": False})
-#constants.set_mainnet()
-config = SimpleConfig({"testnet": True})
-constants.set_testnet()
+config = SimpleConfig({"testnet": False})
+constants.set_mainnet()
+#config = SimpleConfig({"testnet": True})
+#constants.set_testnet()
 daemon = Daemon(config, listen_jsonrpc=False)
 
 class rElectrum(App):
