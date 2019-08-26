@@ -12,8 +12,12 @@ from remi import start, App
 from pyzbar.pyzbar import decode
 from electrum.simple_config import SimpleConfig
 from electrum import constants
-from electrum.daemon import Daemon
 from electrum.wallet import restore_wallet_from_text
+from electrum.daemon import Daemon
+from electrum.bitcoin import base_encode, is_address, base_decode
+from electrum.util import bh2u
+from electrum.transaction import tx_from_str, Transaction
+from decimal import Decimal
 from wallet_functions import WalletInterface
 import asyncio
 import pytz
@@ -22,13 +26,16 @@ from datetime import datetime
 
 unit = 1e8 # BTC
 
-config = SimpleConfig({"testnet": False})
-constants.set_mainnet()
+#config = SimpleConfig({"testnet": False})
+#constants.set_mainnet()
+config = SimpleConfig({"testnet": True})
+constants.set_testnet()
 daemon = Daemon(config, listen_jsonrpc=False)
 
 class rElectrum(App):
     def __init__(self, *args, **kwargs):
         self.wallets_list = {}
+        self.current_wallet = ''
         super(rElectrum, self).__init__(*args, static_file_path={'my_res':'./res/'})
 
     def set_browser_id(self, **kwargs):
@@ -58,7 +65,6 @@ class rElectrum(App):
         self.qr_button_confirm = gui.Label('Get QR Code', style={'font-size':'16px', 'text-align':'center', 'margin':'5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '100%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px', 'border-style':'none'})
         self.qr_button_cancel = gui.Label('Cancel', style={'font-size':'16px', 'text-align':'center', 'margin':'5px 5px 5px 5px', 'padding':'5px 20px 5px 20px','color': 'white', 'width': '100%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px', 'border-style':'none'})
         self.qr_button_cancel.onclick.do(self.qr_cancel)
-        self.qr_code_reason = ''
 
     def qr_snapshot(self, widget, callback_function):
         self.execute_javascript("""
@@ -91,10 +97,10 @@ class rElectrum(App):
             xhr.send(fd);
         """%{'id':str(id(self)), 'callback_function': str(callback_function)})
 
-    def get_qr_from_xpub(self, img_data, filename):
+    def get_xpub_from_qr(self, img_data, filename):
         image = Image.open(io.BytesIO(img_data))
         qr_code_list = decode(image)
-        if len(qr_code_list)>0 and self.qr_code_reason == 'new wallet':
+        if len(qr_code_list)>0:
             self.execute_javascript('document.getElementById("spinner").style.display=""')
             qr_code_data = qr_code_list[0][0].decode('utf-8')
             self.qr_log.set_text('Pub Key Detected')
@@ -109,7 +115,7 @@ class rElectrum(App):
                             done = False
             except:
                 self.qr_log.set_text('Invalid Master Public Key')
-        if len(qr_code_list)==0 and self.qr_code_reason == 'new wallet':
+        if len(qr_code_list)==0:
             self.qr_log.set_text('No valid QR code found')
 
     def qr_cancel(self, widget):
@@ -118,6 +124,7 @@ class rElectrum(App):
             video.srcObject.getTracks()[0].stop();
         """)
         self.set_root_widget(self.wallet_list_page)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
         return
 
     def add_wallet_page(self):
@@ -146,9 +153,8 @@ class rElectrum(App):
 
         if not os.path.isfile('wallets/'+filename):
             self.qr_log.set_text('Filename is valid, scan Master Public Key')
-            self.qr_code_reason='new wallet'
             self.qr_button_confirm.set_style({'color': 'white'})
-            self.qr_button_confirm.onclick.do(self.qr_snapshot, 'get_qr_from_xpub')
+            self.qr_button_confirm.onclick.do(self.qr_snapshot, 'get_xpub_from_qr')
             return
         else:
             self.qr_log.set_text('Wallet already exists')
@@ -158,7 +164,6 @@ class rElectrum(App):
     def switch_to_add_wallet_page(self, widget):
         self.execute_javascript('document.getElementById("spinner").style.display=""')
         self.set_root_widget(self.add_wallet_page)
-        self.execute_javascript('document.getElementById("spinner").style.display="none"')
         self.execute_javascript("""
             const video = document.querySelector('video');
             video.setAttribute("playsinline", true);
@@ -166,6 +171,7 @@ class rElectrum(App):
             navigator.mediaDevices.getUserMedia({video: { facingMode: { ideal: "environment" } }, audio: false}).
                 then((stream) => {video.srcObject = stream});
         """)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def main_page(self):
         if self.userdir != '':
@@ -184,7 +190,7 @@ class rElectrum(App):
                     wallet_balance = self.wallets_list[wallet].get_balance()
                     self.buttons[wallet]['row1']=gui.Label(wallet+' '+str(sum(wallet_balance)/unit), style={'font-size':'20px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
                     self.buttons[wallet]['row1'].onclick.do(self.go_to_wallet, wallet)
-                    self.buttons[wallet]['row2']=gui.Label('\U00002714 '+str(wallet_balance[0]/unit)+' \U000023F3 '+str(wallet_balance[1]/unit), style={'font-size':'14px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
+                    self.buttons[wallet]['row2']=gui.Label('\U00002714 '+"{:.8f}".format(Decimal(wallet_balance[0]/unit))+' \U000023F3 '+"{:.8f}".format(Decimal(wallet_balance[1]/unit)), style={'font-size':'14px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
                     self.buttons[wallet]['row2'].onclick.do(self.go_to_wallet, wallet)
                     wallet_list_page_widgets.append(self.buttons[wallet]['row1'])
                     wallet_list_page_widgets.append(self.buttons[wallet]['row2'])
@@ -253,18 +259,22 @@ class rElectrum(App):
             for wallet in self.wallets_list:
                 wallet_balance = self.wallets_list[wallet].get_balance()
                 self.buttons[wallet]['row1'].set_text(wallet+' '+str(sum(wallet_balance)/unit))
-                self.buttons[wallet]['row2'].set_text('\U00002714 '+str(wallet_balance[0]/unit)+' \U000023F3 '+str(wallet_balance[1]/unit))
+                self.buttons[wallet]['row2'].set_text('\U00002714 '+"{:.8f}".format(Decimal(wallet_balance[0]/unit))+' \U000023F3 '+"{:.8f}".format(Decimal(wallet_balance[1]/unit)))
 
     def go_to_wallet(self, widget, *args):
         self.execute_javascript('document.getElementById("spinner").style.display=""')
         wallet = args[0]
+        self.current_wallet=wallet
         tx_list=[]
         row_count=0
         for tx in self.wallets_list[wallet].get_history():
-            tx_time = datetime.fromtimestamp(tx[1].timestamp, self.timezone).strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                tx_time = datetime.fromtimestamp(tx[1].timestamp, self.timezone).strftime("%Y-%m-%d %H:%M:%S")
+            except:
+                tx_time = 'Unconfirmed'
             tx_id = tx[0]
-            tx_amount = str(tx[2]/unit)
-            tx_balance = str(tx[3]/unit)
+            tx_amount = "{:.8f}".format(Decimal(tx[2]/unit))
+            tx_balance = "{:.8f}".format(Decimal(tx[3]/unit))
             table_row = gui.TableRow((tx_time, tx_amount, '\U000027A1'), style={'color':'#A7A19F'}, height=30)
             for cell in table_row.children:
                 if tx[2]>0:
@@ -313,6 +323,7 @@ class rElectrum(App):
         self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def go_back_main(self, widget):
+        self.current_wallet = ''
         self.set_root_widget(self.wallet_list_page)
         self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
@@ -329,10 +340,10 @@ class rElectrum(App):
             addr_balance = self.wallets_list[wallet].wallet.get_addr_balance(address)
             if addr_hist>0:
                 button_row1=gui.Label(address, style={'font-size':'14px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'aqua', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
-                button_row2=gui.Label('Used: '+str(addr_hist)+' times \U00002714 '+str(addr_balance[0]/unit)+' \U000023F3 '+str(addr_balance[1]/unit), style={'font-size':'14px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'aqua', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
+                button_row2=gui.Label('Used: '+str(addr_hist)+' times \U00002714 '+"{:.8f}".format(Decimal(addr_balance[0]/unit))+' \U000023F3 '+"{:.8f}".format(Decimal(addr_balance[1]/unit)), style={'font-size':'14px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'aqua', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
             else:
                 button_row1=gui.Label(address, style={'font-size':'14px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
-                button_row2=gui.Label('Used: '+str(addr_hist)+' times \U00002714 '+str(addr_balance[0]/unit)+' \U000023F3 '+str(addr_balance[1]/unit), style={'font-size':'14px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
+                button_row2=gui.Label('Used: '+str(addr_hist)+' times \U00002714 '+"{:.8f}".format(Decimal(addr_balance[0]/unit))+' \U000023F3 '+"{:.8f}".format(Decimal(addr_balance[1]/unit)), style={'font-size':'14px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
 
             button_row1.onclick.do(self.addr_to_qr, address)
             button_row2.onclick.do(self.addr_to_qr, address)
@@ -360,12 +371,229 @@ class rElectrum(App):
 
     def go_to_send(self, widget, wallet):
         self.execute_javascript('document.getElementById("spinner").style.display=""')
+        self.wallets_list[wallet].str_recipient == ''
+        self.wallets_list[wallet].str_amount == ''
         send_widgets = []
         send_widgets.append(self.logo)
+        
+        button_payto=gui.Label('Pay to \U0001F4F7', style={'font-size':'20px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
+        button_payto.onclick.do(self.qr_to_address)
+        self.button_address=gui.TextInput(single_line=True, hint='Paste address or click to scan', style={'font-size':'12px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
+        self.button_address.onchange.do(self.check_tx_status, wallet)
+
+        label_amount=gui.Label('Amount', style={'font-size':'20px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
+        self.text_amount=gui.TextInput(single_line=True, hint='Set the amount to send', style={'font-size':'14px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
+        self.text_amount.onchange.do(self.check_tx_status, wallet)
+
+        self.label_fee=gui.Label('Fee', style={'font-size':'20px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
+        slider_fee=gui.Slider(3, 0, 6, 1, height=20, style={'font-size':'20px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
+        self.get_slider_fee(slider_fee, 3, wallet)
+        slider_fee.onchange.do(self.get_slider_fee, wallet)
+
+        summary_label=gui.Label('Summary', style={'font-size':'20px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
+        self.summary_text=gui.TextInput(height=250, style={'font-size':'12px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
+        
+        self.sign_button=gui.Label('Sign Tx', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'black', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
+        self.sign_button.onclick.do(None)
+
+        send_widgets.append(button_payto)
+        send_widgets.append(self.button_address)
+        send_widgets.append(label_amount)
+        send_widgets.append(self.text_amount)
+        send_widgets.append(self.label_fee)
+        send_widgets.append(slider_fee)
+        send_widgets.append(summary_label)
+        send_widgets.append(self.summary_text)
+
+        send_widgets.append(self.sign_button)
         send_widgets.append(self.back_button)
-        send_page = gui.VBox(children=send_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
-        self.set_root_widget(send_page)
+        self.send_page = gui.VBox(children=send_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
+        self.set_root_widget(self.send_page)
         self.execute_javascript('document.getElementById("spinner").style.display="none"')
+
+    def get_slider_fee(self, widget, value, wallet):
+        value=int(value)
+        is_dyn = self.wallets_list[wallet].config.is_dynfee()
+        is_mempool = self.wallets_list[wallet].config.use_mempool_fees()
+        if is_dyn:
+            self.label_fee.fee_rate = self.wallets_list[wallet].config.depth_to_fee(value) if is_mempool else self.wallets_list[wallet].config.eta_to_fee(value)
+        target, estimate = self.wallets_list[wallet].config.get_fee_text(value, is_dyn, is_mempool, self.label_fee.fee_rate)
+        self.label_fee.set_text('Fee: '+target+' '+estimate)
+        self.check_tx_status(self.label_fee, '', wallet)
+
+    def check_tx_status(self, widget, value, wallet):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
+        if self.button_address.get_text() == '':
+            self.execute_javascript('document.getElementById("spinner").style.display="none"')
+            return
+        if self.text_amount.get_text() == '':
+            self.execute_javascript('document.getElementById("spinner").style.display="none"')
+            return
+        self.wallets_list[wallet].str_recipient = self.button_address.get_text()
+        self.wallets_list[wallet].str_amount = self.text_amount.get_text()
+        self.wallets_list[wallet].str_fee = '0.0'
+        tx, _ = self.wallets_list[wallet].prepare_tx()
+        if not hasattr(tx, 'estimated_size'):
+            self.summary_text.set_text(tx)
+            self.execute_javascript('document.getElementById("spinner").style.display="none"')
+            return
+        self.wallets_list[wallet].str_recipient = self.button_address.get_text()
+        self.wallets_list[wallet].str_amount = self.text_amount.get_text()
+        self.wallets_list[wallet].str_fee=str(Decimal(tx.estimated_size()*self.label_fee.fee_rate/1e11))
+        tx, qr_tx = self.wallets_list[wallet].prepare_tx()
+
+        summary='TX ID\n'
+        summary+=tx.txid()+'\n\n'
+        summary+='Amount '
+        summary+=self.wallets_list[wallet].str_amount+' BTC\n\n'
+        summary+='From addresses\n'
+        for addr in tx.inputs():
+            summary+=addr['address']+'\n'
+        summary+='\nTo addresses\n'
+        for addr in tx.outputs():
+            if not self.wallets_list[wallet].wallet.is_mine(addr.address):
+                summary+=addr.address+'\n'
+        summary+='\nChange address\n'
+        for addr in tx.outputs():
+            if self.wallets_list[wallet].wallet.is_mine(addr.address):
+                summary+=addr.address+'\n'
+        summary+='\nWith fee '
+        summary+="{:.8f}".format(Decimal(tx.get_fee()/unit))+' BTC'
+        self.summary_text.set_text(summary)
+        self.sign_button.set_style({'color': 'white'})
+        self.sign_button.onclick.do(self.sign_tx_create, qr_tx)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
+        
+    def qr_to_address(self, widget):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
+        self.qr_code_widgets()
+        qr_to_address_widgets = []
+        qr_to_address_widgets.append(self.logo)
+        qr_to_address_widgets.append(self.qr_video)
+        qr_to_address_widgets.append(self.qr_canvas)
+        self.qr_button_confirm.onclick.do(self.qr_snapshot, 'get_address_from_qr')
+        qr_to_address_widgets.append(gui.HBox(children=[self.qr_button_confirm, self.qr_button_cancel], style={'margin':'0px auto', 'width':'100%', 'background-color':'#1A222C'}))
+        qr_to_address_page = gui.VBox(children=qr_to_address_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
+        self.set_root_widget(qr_to_address_page)
+        self.execute_javascript("""
+            const video = document.querySelector('video');
+            video.setAttribute("playsinline", true);
+            const canvas = document.querySelector('canvas');
+            navigator.mediaDevices.getUserMedia({video: { facingMode: { ideal: "environment" } }, audio: false}).
+                then((stream) => {video.srcObject = stream});
+        """)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
+
+    def get_address_from_qr(self, img_data, filename):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
+        image = Image.open(io.BytesIO(img_data))
+        qr_code_list = decode(image)
+        if len(qr_code_list)>0:
+            qr_code_data = qr_code_list[0][0].decode('utf-8')
+            if 'bitcoin:' in qr_code_data:
+                qr_code_data = qr_code_data[8:]
+            if is_address(qr_code_data):
+                self.button_address.set_text(qr_code_data)
+            else:
+                self.button_address.set_text('No valid Bitcoin address found')
+        else:
+            self.button_address.set_text('No valid Bitcoin address found')
+        self.execute_javascript("""
+            const video = document.querySelector('video');
+            video.srcObject.getTracks()[0].stop();
+        """)
+        self.set_root_widget(self.send_page)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
+
+    def sign_tx_create(self, widget, qr_tx):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
+        sign_tx_create_widgets=[]
+        sign_tx_create_widgets.append(self.logo)
+        sign_tx_create_widgets.append(gui.Label('Scan TX with offline Electrum', style={'font-size':'16px', 'text-align':'center', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'}))
+        image = qrcode.make(qr_tx)
+        buffered = BytesIO()
+        image.save(buffered, format="PNG")
+        sign_tx_create_widgets.append(gui.Image('data:image/png;base64, '+(base64.b64encode(buffered.getvalue())).decode('utf-8'), width=350))
+        sign_tx_create_widgets.append(gui.Label('Sign it then press Import', style={'font-size':'16px', 'text-align':'center', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'}))
+        import_button=gui.Label('Import', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
+        import_button.onclick.do(self.sign_tx_get_signed)
+        sign_tx_create_widgets.append(import_button)
+        sign_tx_create_widgets.append(self.back_button)
+        sign_tx_create_page = gui.VBox(children=sign_tx_create_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'}) 
+        self.set_root_widget(sign_tx_create_page)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
+
+    def sign_tx_get_signed(self, widget):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
+        self.qr_code_widgets()
+        sign_tx_get_signed_widgets = []
+        sign_tx_get_signed_widgets.append(self.logo)
+        sign_tx_get_signed_widgets.append(self.qr_video)
+        sign_tx_get_signed_widgets.append(self.qr_canvas)
+        self.qr_button_confirm.onclick.do(self.qr_snapshot, 'sign_tx_send')
+        sign_tx_get_signed_widgets.append(gui.HBox(children=[self.qr_button_confirm, self.qr_button_cancel], style={'margin':'0px auto', 'width':'100%', 'background-color':'#1A222C'}))
+        sign_tx_get_signed_page = gui.VBox(children=sign_tx_get_signed_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
+        self.set_root_widget(sign_tx_get_signed_page)
+        self.execute_javascript("""
+            const video = document.querySelector('video');
+            video.setAttribute("playsinline", true);
+            const canvas = document.querySelector('canvas');
+            navigator.mediaDevices.getUserMedia({video: { facingMode: { ideal: "environment" } }, audio: false}).
+                then((stream) => {video.srcObject = stream});
+        """)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
+
+    def sign_tx_send(self, img_data, filename):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
+        image = Image.open(io.BytesIO(img_data))
+        qr_code_list = decode(image)
+        if len(qr_code_list)>0:
+            signed_tx = qr_code_list[0][0].decode('utf-8')
+        else:
+            None
+        self.execute_javascript("""
+            const video = document.querySelector('video');
+            video.srcObject.getTracks()[0].stop();
+        """)
+        tx_status=gui.Label('', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
+        try:
+            tx_data = bh2u(base_decode(signed_tx, length=None, base=43))
+            tx = Transaction(tx_from_str(tx_data))
+            tx_valid = True
+        except:
+            tx_valid = False
+
+        sign_tx_send_widgets = []
+        sign_tx_send_widgets.append(self.logo)
+        sign_tx_send_widgets.append(tx_status)
+        if tx_valid:
+            tx_status.set_text('Tx ready for broadcast')
+            broadcast_button=gui.Label('Broadcast TX', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#F71200', 'border-radius': '20px 20px 20px 20px'})
+            broadcast_button.onclick.do(self.broadcast_tx, tx)
+            sign_tx_send_widgets.append(broadcast_button)
+        else:
+            tx_status.set_text('Invalid TX or QR code')
+
+        sign_tx_send_widgets.append(self.back_button)
+        sign_tx_send_page = gui.VBox(children=sign_tx_send_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'}) 
+        self.set_root_widget(sign_tx_send_page)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
+
+    def broadcast_tx(self, widget, tx):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
+        try:
+            self.wallets_list[self.current_wallet].network.run_from_another_thread(self.wallets_list[self.current_wallet].network.broadcast_transaction(tx))
+            tmp_page = gui.VBox(children=[self.logo, gui.Label('SENT!', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'black', 'width': '85%', 'background-color':'lime', 'border-radius': '20px 20px 20px 20px'})], style={'margin':'0px auto', 'background-color':'#1A222C'})
+            self.set_root_widget(tmp_page)
+            time.sleep(3)
+            self.set_root_widget(self.wallet_list_page)
+            self.execute_javascript('document.getElementById("spinner").style.display="none"')
+        except:
+            tmp_page = gui.VBox(children=[self.logo, gui.Label('ERROR, Check your TX', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'red', 'border-radius': '20px 20px 20px 20px'})], style={'margin':'0px auto', 'background-color':'#1A222C'})
+            self.set_root_widget(tmp_page)
+            time.sleep(3)
+            self.set_root_widget(self.send_page)
+            self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def delete_wallet(self, widget, *args):
         self.execute_javascript('document.getElementById("spinner").style.display=""')

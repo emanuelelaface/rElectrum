@@ -7,6 +7,8 @@ from electrum.util import format_satoshis
 from electrum.bitcoin import is_address, COIN, TYPE_ADDRESS
 from electrum.transaction import TxOutput, Transaction
 from electrum.network import TxBroadcastError, BestEffortRequestFailed
+from electrum.util import bfh
+from electrum.bitcoin import base_encode
 
 _ = lambda x:x  # i18n
 
@@ -20,6 +22,8 @@ class WalletInterface:
         self.str_description = ""
         self.str_amount = ""
         self.str_fee = ""
+
+        self.config = config
 
         self.wallet = Wallet(storage)
         self.wallet.start_network(self.network)
@@ -130,20 +134,17 @@ class WalletInterface:
     def main(self):
         pass
 
-    def do_send(self):
+    def prepare_tx(self):
         if not is_address(self.str_recipient):
-            print(_('Invalid Bitcoin address'))
-            return
+            return 'Invalid Bitcoin address', ''
         try:
             amount = int(Decimal(self.str_amount) * COIN)
         except Exception:
-            print(_('Invalid Amount'))
-            return
+            return 'Invalid Amount', ''
         try:
             fee = int(Decimal(self.str_fee) * COIN)
         except Exception:
-            print(_('Invalid Fee'))
-            return
+            return 'Invalid Fee', ''
 
         if self.wallet.has_password():
             password = self.password_dialog()
@@ -152,34 +153,34 @@ class WalletInterface:
         else:
             password = None
 
-        c = ""
-        while c != "y":
-            c = input("ok to send (y/n)?")
-            if c == "n": return
-
+#        c = ""
+#        while c != "y":
+#            c = input("ok to send (y/n)?")
+#            if c == "n": return
+#
         try:
-            tx = self.wallet.mktx([TxOutput(TYPE_ADDRESS, self.str_recipient, amount)],
-                                  password, self.config, fee)
+            tx = self.wallet.mktx([TxOutput(TYPE_ADDRESS, self.str_recipient, amount)], password, self.config, fee)
+            tx.set_rbf(True)
+            return tx, base_encode(bfh(str(tx)), base=43)
         except Exception as e:
-            print(repr(e))
-            return
+            return (repr(e)), ''
 
-        if self.str_description:
-            self.wallet.labels[tx.txid()] = self.str_description
-
-        print(_("Please wait..."))
-        try:
-            self.network.run_from_another_thread(self.network.broadcast_transaction(tx))
-        except TxBroadcastError as e:
-            msg = e.get_message_for_gui()
-            print(msg)
-        except BestEffortRequestFailed as e:
-            msg = repr(e)
-            print(msg)
-        else:
-            print(_('Payment sent.'))
-            #self.do_clear()
-            #self.update_contacts_tab()
+#        if self.str_description:
+#            self.wallet.labels[tx.txid()] = self.str_description
+#
+#        print(_("Please wait..."))
+#        try:
+#            self.network.run_from_another_thread(self.network.broadcast_transaction(tx))
+#        except TxBroadcastError as e:
+#            msg = e.get_message_for_gui()
+#            print(msg)
+#        except BestEffortRequestFailed as e:
+#            msg = repr(e)
+#            print(msg)
+#        else:
+#            print(_('Payment sent.'))
+#            #self.do_clear()
+#            #self.update_contacts_tab()
 
     def network_dialog(self):
         print("use 'electrum setconfig server/proxy' to change your network settings")
