@@ -179,7 +179,10 @@ class rElectrum(App):
             asyncio.set_event_loop(asyncio.new_event_loop())
             for wallet_path in os.listdir(self.userdir):
                 if wallet_path not in self.wallets_list and '.tmp.' not in wallet_path:
+                    try:
                         self.wallets_list[wallet_path]=WalletInterface(config, daemon, self.userdir+'/'+wallet_path)
+                    except:
+                        os.remove(self.userdir+'/'+wallet_path)
             
             wallet_list_page_widgets = []
             wallet_list_page_widgets.append(self.logo)
