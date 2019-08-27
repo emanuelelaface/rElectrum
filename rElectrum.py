@@ -26,10 +26,10 @@ from datetime import datetime
 
 unit = 1e8 # BTC
 
-config = SimpleConfig({"testnet": False})
-constants.set_mainnet()
-#config = SimpleConfig({"testnet": True})
-#constants.set_testnet()
+#config = SimpleConfig({"testnet": False})
+#constants.set_mainnet()
+config = SimpleConfig({"testnet": True})
+constants.set_testnet()
 daemon = Daemon(config, listen_jsonrpc=False)
 
 class rElectrum(App):
@@ -280,7 +280,7 @@ class rElectrum(App):
                 if tx[2]>0:
                     table_row.get_child(cell).set_style({'color': 'lime', 'background-color':'#24303F', 'border-style':'none'})
                 else:
-                    table_row.get_child(cell).set_style({'color': 'red', 'background-color':'#24303F', 'border-style':'none'})
+                    table_row.get_child(cell).set_style({'color': '#F71200', 'background-color':'#24303F', 'border-style':'none'})
 
             table_row.tx_details = {'id': tx_id, 'time': tx_time, 'amount': tx_amount, 'block': str(tx[1].height), 'conf':str(tx[1].conf), 'inputs':[], 'outputs':[]}
             for addr in self.wallets_list[wallet].get_tx_in(tx_id):
@@ -386,12 +386,16 @@ class rElectrum(App):
         self.text_amount.onchange.do(self.check_tx_status, wallet)
 
         self.label_fee=gui.Label('Fee', style={'font-size':'20px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
-        slider_fee=gui.Slider(3, 0, 6, 1, height=20, style={'font-size':'20px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
-        self.get_slider_fee(slider_fee, 3, wallet)
+        if self.wallets_list[wallet].config.use_mempool_fees():
+            slider_fee=gui.Slider(3, 0, 6, 1, height=20, style={'font-size':'20px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
+            self.get_slider_fee(slider_fee, 3, wallet)
+        else:
+            slider_fee=gui.Slider(2, 0, 4, 1, height=20, style={'font-size':'20px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
+            self.get_slider_fee(slider_fee, 2, wallet)
         slider_fee.onchange.do(self.get_slider_fee, wallet)
 
-        summary_label=gui.Label('Summary', style={'font-size':'20px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
-        self.summary_text=gui.TextInput(height=250, style={'font-size':'12px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
+        summary_label=gui.Label('Summary Unsigned TX', style={'font-size':'20px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
+        self.summary_text=gui.TextInput(height=300, style={'font-size':'12px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
         
         self.sign_button=gui.Label('Sign Tx', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'black', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
         self.sign_button.onclick.do(None)
@@ -416,7 +420,10 @@ class rElectrum(App):
         is_dyn = self.wallets_list[wallet].config.is_dynfee()
         is_mempool = self.wallets_list[wallet].config.use_mempool_fees()
         if is_dyn:
-            self.label_fee.fee_rate = self.wallets_list[wallet].config.depth_to_fee(value) if is_mempool else self.wallets_list[wallet].config.eta_to_fee(value)
+            if is_mempool:
+                self.label_fee.fee_rate = self.wallets_list[wallet].config.depth_to_fee(value)
+            else:
+                self.label_fee.fee_rate = self.wallets_list[wallet].config.eta_to_fee(value)
         target, estimate = self.wallets_list[wallet].config.get_fee_text(value, is_dyn, is_mempool, self.label_fee.fee_rate)
         self.label_fee.set_text('Fee: '+target+' '+estimate)
         self.check_tx_status(self.label_fee, '', wallet)
@@ -442,7 +449,8 @@ class rElectrum(App):
         self.wallets_list[wallet].str_fee=str(Decimal(tx.estimated_size()*self.label_fee.fee_rate/1e11))
         tx, qr_tx = self.wallets_list[wallet].prepare_tx()
 
-        summary='TX ID\n'
+        summary='Status: '+self.wallets_list[self.current_wallet].wallet.get_tx_info(tx).status+'\n\n'
+        summary+='TX ID\n'
         summary+=tx.txid()+'\n\n'
         summary+='Amount '
         summary+=self.wallets_list[wallet].str_amount+' BTC\n\n'
@@ -515,7 +523,7 @@ class rElectrum(App):
         image.save(buffered, format="PNG")
         sign_tx_create_widgets.append(gui.Image('data:image/png;base64, '+(base64.b64encode(buffered.getvalue())).decode('utf-8'), width=350))
         sign_tx_create_widgets.append(gui.Label('Sign it then press Import', style={'font-size':'16px', 'text-align':'center', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'}))
-        import_button=gui.Label('Import', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
+        import_button=gui.Label('Import Signed TX', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
         import_button.onclick.do(self.sign_tx_get_signed)
         sign_tx_create_widgets.append(import_button)
         sign_tx_create_widgets.append(self.back_button)
@@ -565,14 +573,51 @@ class rElectrum(App):
 
         sign_tx_send_widgets = []
         sign_tx_send_widgets.append(self.logo)
-        sign_tx_send_widgets.append(tx_status)
         if tx_valid:
+            summary_label=gui.Label('Summary of Signed TX', style={'font-size':'20px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
+            summary_text=gui.TextInput(height=300, style={'font-size':'12px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
+
+            summary='Status: '+self.wallets_list[self.current_wallet].wallet.get_tx_info(tx).status+'\n\n'
+            summary+='TX ID\n'
+            summary+=tx.txid()+'\n\n'
+            summary+='Amount '
+            amount = 0
+            for addr in tx.outputs():
+                if not self.wallets_list[self.current_wallet].wallet.is_mine(addr.address):
+                    amount += addr.value
+            summary+="{:.8f}".format(Decimal(amount/unit))+' BTC\n\n'
+            summary+='From addresses\n'
+            for prev_hash in tx.inputs():
+                for addr in self.wallets_list[self.current_wallet].get_tx_out(prev_hash['prevout_hash']):
+                    if self.wallets_list[self.current_wallet].wallet.is_mine(addr.address):
+                        summary+=addr.address+'\n'
+            summary+='\nTo addresses\n'
+            for addr in tx.outputs():
+                if not self.wallets_list[self.current_wallet].wallet.is_mine(addr.address):
+                    summary+=addr.address+'\n'
+            summary+='\nChange address\n'
+            for addr in tx.outputs():
+                if self.wallets_list[self.current_wallet].wallet.is_mine(addr.address):
+                    summary+=addr.address+'\n'
+            summary+='\nWith fee '
+            input_value = 0
+            summary+="{:.8f}".format(Decimal(self.wallets_list[self.current_wallet].wallet.get_tx_info(tx).fee/unit))+' BTC'
+            summary_text.set_text(summary)
+
+            sign_tx_send_widgets.append(summary_label)
+            sign_tx_send_widgets.append(summary_text)
+            sign_tx_send_widgets.append(tx_status)
             tx_status.set_text('Tx ready for broadcast')
-            broadcast_button=gui.Label('Broadcast TX', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#F71200', 'border-radius': '20px 20px 20px 20px'})
+            broadcast_button=gui.Label('Broadcast TX', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'black', 'width': '85%', 'background-color':'lime', 'border-radius': '20px 20px 20px 20px'})
             broadcast_button.onclick.do(self.broadcast_tx, tx)
             sign_tx_send_widgets.append(broadcast_button)
         else:
+            sign_tx_send_widgets.append(tx_status)
             tx_status.set_text('Invalid TX or QR code')
+            tx_status.set_style({'background-color':'#F71200'})
+            scan_again=gui.Label('Scan Again', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#F71200', 'border-radius': '20px 20px 20px 20px'})
+            scan_again.onclick.do(self.sign_tx_get_signed)
+            sign_tx_send_widgets.append(scan_again)
 
         sign_tx_send_widgets.append(self.back_button)
         sign_tx_send_page = gui.VBox(children=sign_tx_send_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'}) 
@@ -589,7 +634,7 @@ class rElectrum(App):
             self.set_root_widget(self.wallet_list_page)
             self.execute_javascript('document.getElementById("spinner").style.display="none"')
         except:
-            tmp_page = gui.VBox(children=[self.logo, gui.Label('ERROR, Check your TX', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'red', 'border-radius': '20px 20px 20px 20px'})], style={'margin':'0px auto', 'background-color':'#1A222C'})
+            tmp_page = gui.VBox(children=[self.logo, gui.Label('ERROR, Check your TX', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#F71200', 'border-radius': '20px 20px 20px 20px'})], style={'margin':'0px auto', 'background-color':'#1A222C'})
             self.set_root_widget(tmp_page)
             time.sleep(3)
             self.set_root_widget(self.send_page)
@@ -647,7 +692,7 @@ class rElectrum(App):
         if float(row.tx_details['amount'])>0:
             info_amount_2.set_style({'color':'lime'})
         else:
-            info_amount_2.set_style({'color':'red'})
+            info_amount_2.set_style({'color':'#F71200'})
         tx_info_widgets.append(info_amount_1)
         tx_info_widgets.append(info_amount_2)
 
