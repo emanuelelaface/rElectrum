@@ -95,11 +95,12 @@ class rElectrum(App):
             return
         qr_code_list = decode(image)
         if len(qr_code_list)>0:
+            self.qr_log.set_text('QR code detected')
             self.execute_javascript('document.getElementById("spinner").style.display=""')
             qr_code_data = qr_code_list[0][0].decode('utf-8')
             self.qr_log.set_text('Pub Key Detected')
             try:
-                restore_wallet_from_text(qr_code_data, path=self.userdir+'/'+self.new_wallet_name.get_value())
+                new_wallet = restore_wallet_from_text(qr_code_data, path=self.userdir+'/'+self.new_wallet_name.get_value())
                 done = False
                 time.sleep(1)
                 while not done:
@@ -107,17 +108,30 @@ class rElectrum(App):
                     for i in os.listdir(self.userdir):
                         if self.new_wallet_name.get_value()+'.tmp' in i:
                             done = False
-                self.execute_javascript("""
-                    document.video_stop = true;
-                    const video = document.querySelector('video');
-                    video.srcObject.getTracks()[0].stop();
-                """)
             except:
                 self.qr_log.set_text('Invalid Master Public Key')
+                self.execute_javascript('document.getElementById("spinner").style.display="none"')
+                return
         else:
             self.qr_log.set_text('No QR detected')
+            self.execute_javascript('document.getElementById("spinner").style.display="none"')
+            return
+
+        if new_wallet['wallet'].get_master_public_key() != qr_code_data:
+            os.remove(self.userdir+'/'+self.new_wallet_name.get_value())
+            self.qr_log.set_text('Invalid Master Public Key')
+            self.execute_javascript('document.getElementById("spinner").style.display="none"')
+            return
+
+        self.execute_javascript("""
+            document.video_stop = true;
+            const video = document.querySelector('video');
+            video.srcObject.getTracks()[0].stop();
+        """)
+        self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def qr_cancel(self, widget):
+        self.execute_javascript('document.getElementById("spinner").style.display=""')
         self.execute_javascript("""
             document.video_stop = true;
             const video = document.querySelector('video');
