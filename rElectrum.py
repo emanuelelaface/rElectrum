@@ -67,6 +67,7 @@ class rElectrum(App):
             var params={};
             var frame = 0;
             document.video_stop = false;
+            document.callback_suspend = false;
             const video = document.querySelector('video');
             video.setAttribute("playsinline", true);
             const canvas = document.createElement('canvas');
@@ -74,7 +75,7 @@ class rElectrum(App):
             then((stream) => {video.srcObject = stream});
             const render = () => {
                 if (document.video_stop) { return; }
-                if (frame==90) {
+                if (frame==90 && !document.calback_suspend) {
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                     canvas.getContext('2d').drawImage(video, 0, 0);
@@ -89,9 +90,11 @@ class rElectrum(App):
     """%{'id':str(id(self)), 'callback_function': str(callback_function)})
 
     def get_xpub_from_qr(self, **kwargs):
+        self.execute_javascript('document.callback_suspend = true;');
         try:
             image = Image.open(io.BytesIO(base64.b64decode(kwargs['image'])))
         except:
+            self.execute_javascript('document.callback_suspend = false;');
             return
         qr_code_list = decode(image)
         if len(qr_code_list)>0:
@@ -111,16 +114,19 @@ class rElectrum(App):
             except:
                 self.qr_log.set_text('Invalid Master Public Key')
                 self.execute_javascript('document.getElementById("spinner").style.display="none"')
+                self.execute_javascript('document.callback_suspend = false;');
                 return
         else:
             self.qr_log.set_text('No QR detected')
             self.execute_javascript('document.getElementById("spinner").style.display="none"')
+            self.execute_javascript('document.callback_suspend = false;');
             return
 
         if new_wallet['wallet'].get_master_public_key() != qr_code_data:
             os.remove(self.userdir+'/'+self.new_wallet_name.get_value())
             self.qr_log.set_text('Invalid Master Public Key')
             self.execute_javascript('document.getElementById("spinner").style.display="none"')
+            self.execute_javascript('document.callback_suspend = false;');
             return
 
         self.execute_javascript("""
@@ -485,13 +491,15 @@ class rElectrum(App):
         self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def get_address_from_qr(self, **kwargs):
-        self.execute_javascript('document.getElementById("spinner").style.display=""')
+        self.execute_javascript('document.callback_suspend = true;');
         try:
             image = Image.open(io.BytesIO(base64.b64decode(kwargs['image'])))
         except:
+            self.execute_javascript('document.callback_suspend = false;');
             return
         qr_code_list = decode(image)
         if len(qr_code_list)>0:
+            self.execute_javascript('document.getElementById("spinner").style.display=""')
             qr_code_data = qr_code_list[0][0].decode('utf-8')
             if 'bitcoin:' in qr_code_data:
                 qr_code_data = qr_code_data[8:]
@@ -503,10 +511,14 @@ class rElectrum(App):
             	    video.srcObject.getTracks()[0].stop();
         	""")
             else:
+                self.execute_javascript('document.getElementById("spinner").style.display="none"')
                 self.qr_log.set_text('No valid Bitcoin address found')
+                self.execute_javascript('document.callback_suspend = false;');
                 return
         else:
             self.qr_log.set_text('No QR detected')
+            self.execute_javascript('document.getElementById("spinner").style.display="none"')
+            self.execute_javascript('document.callback_suspend = false;');
             return
         self.set_root_widget(self.send_page)
         self.execute_javascript('document.getElementById("spinner").style.display="none"')
@@ -543,15 +555,20 @@ class rElectrum(App):
         self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def sign_tx_send(self, **kwargs):
+        self.execute_javascript('document.callback_suspend = true;');
         try:
             image = Image.open(io.BytesIO(base64.b64decode(kwargs['image'])))
         except:
+            self.execute_javascript('document.callback_suspend = false;');
             return
         qr_code_list = decode(image)
         if len(qr_code_list)>0:
+            self.execute_javascript('document.getElementById("spinner").style.display=""')
             signed_tx = qr_code_list[0][0].decode('utf-8')
         else:
             self.qr_log.set_text('No QR detected')
+            self.execute_javascript('document.getElementById("spinner").style.display="none"')
+            self.execute_javascript('document.callback_suspend = false;');
             return
 
         try:
@@ -561,10 +578,14 @@ class rElectrum(App):
             tx_valid = True
         except:
             tx_valid = False
+            self.execute_javascript('document.callback_suspend = false;');
+            self.execute_javascript('document.getElementById("spinner").style.display="none"')
             return
 
         if self.wallets_list[self.current_wallet].wallet.get_tx_info(tx).status != 'Signed':
             self.qr_log.set_text('TX not signed')
+            self.execute_javascript('document.getElementById("spinner").style.display="none"')
+            self.execute_javascript('document.callback_suspend = false;');
             return
 
         tx_status=gui.Label('', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
@@ -610,6 +631,8 @@ class rElectrum(App):
             broadcast_button.onclick.do(self.broadcast_tx, tx)
             sign_tx_send_widgets.append(broadcast_button)
         else:
+            self.execute_javascript('document.callback_suspend = false;');
+            self.execute_javascript('document.getElementById("spinner").style.display="none"')
             return
 
         self.execute_javascript("""
