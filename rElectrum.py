@@ -58,47 +58,41 @@ class rElectrum(App):
         self.qr_video.attributes['autoplay'] = 'true'
         self.qr_video.attributes['width'] = width
         self.qr_video.attributes['height'] = height
-        self.qr_canvas = gui.Widget(_type='canvas')
-        self.qr_canvas.style['display'] = 'none'
-        self.qr_canvas.attributes['width'] = width
-        self.qr_canvas.attributes['height'] = height
-        self.qr_button_confirm = gui.Label('Get QR Code', style={'font-size':'16px', 'text-align':'center', 'margin':'5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '100%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px', 'border-style':'none'})
         self.qr_button_cancel = gui.Label('Cancel', style={'font-size':'16px', 'text-align':'center', 'margin':'5px 5px 5px 5px', 'padding':'5px 20px 5px 20px','color': 'white', 'width': '100%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px', 'border-style':'none'})
         self.qr_button_cancel.onclick.do(self.qr_cancel)
+        self.qr_log = gui.Label("", style={'font-size':'14px', 'width':'70%', 'text-align':'center', 'margin':'5px', 'padding':'5px 50px 5px 50px', 'color': '#A7A19F', 'border-width':'0.1px', 'border-style':'dashed'})
 
-    def qr_snapshot(self, widget, callback_function):
+    def qr_snapshot(self, callback_function):
         self.execute_javascript("""
+            var params={};
+            var frame = 0;
+            document.video_stop = false;
             const video = document.querySelector('video');
-            const canvas = document.querySelector('canvas');
-            canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                        canvas.getContext('2d').drawImage(video, 0, 0);
-            var binStr = atob( canvas.toDataURL('image/png').split(',')[1] ),
-            len = binStr.length,
-            arr = new Uint8Array(len);
-            for (var i = 0; i < len; i++ ) {
-                arr[i] = binStr.charCodeAt(i);
-            }
-            var blob = new Blob( [arr], {type:'image/png'} );
-            var xhr = new XMLHttpRequest();
-            var fd = new FormData();
-            xhr.open("POST", "/", true);
-            xhr.setRequestHeader('filename', video.videoWidth.toString()+'-'+video.videoHeight.toString());
-            xhr.setRequestHeader('listener', '%(id)s');
-            xhr.setRequestHeader('listener_function', '%(callback_function)s');
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState == 4 && xhr.status == 200) {
-                    console.log('upload success: ');
-                }else if(xhr.status == 400){
-                    console.log('upload failed: ');
+            video.setAttribute("playsinline", true);
+            const canvas = document.createElement('canvas');
+            navigator.mediaDevices.getUserMedia({video: { facingMode: { ideal: "environment" } }, audio: false}).
+            then((stream) => {video.srcObject = stream});
+            const render = () => {
+                if (document.video_stop) { return; }
+                if (frame==90) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    canvas.getContext('2d').drawImage(video, 0, 0);
+                    params['image']=canvas.toDataURL().split(',')[1];
+                    sendCallbackParam('%(id)s','%(callback_function)s',params);
+                    frame = 0;
                 }
-            };
-            fd.append('upload_file', blob);
-            xhr.send(fd);
-        """%{'id':str(id(self)), 'callback_function': str(callback_function)})
+                frame+=1;
+                requestAnimationFrame(render);
+            }
+            requestAnimationFrame(render);
+    """%{'id':str(id(self)), 'callback_function': str(callback_function)})
 
-    def get_xpub_from_qr(self, img_data, filename):
-        image = Image.open(io.BytesIO(img_data))
+    def get_xpub_from_qr(self, **kwargs):
+        try:
+            image = Image.open(io.BytesIO(base64.b64decode(kwargs['image'])))
+        except:
+            return
         qr_code_list = decode(image)
         if len(qr_code_list)>0:
             self.execute_javascript('document.getElementById("spinner").style.display=""')
@@ -113,13 +107,19 @@ class rElectrum(App):
                     for i in os.listdir(self.userdir):
                         if self.new_wallet_name.get_value()+'.tmp' in i:
                             done = False
+                self.execute_javascript("""
+                    document.video_stop = true;
+                    const video = document.querySelector('video');
+                    video.srcObject.getTracks()[0].stop();
+                """)
             except:
                 self.qr_log.set_text('Invalid Master Public Key')
-        if len(qr_code_list)==0:
-            self.qr_log.set_text('No valid QR code found')
+        else:
+            self.qr_log.set_text('No QR detected')
 
     def qr_cancel(self, widget):
         self.execute_javascript("""
+            document.video_stop = true;
             const video = document.querySelector('video');
             video.srcObject.getTracks()[0].stop();
         """)
@@ -133,44 +133,30 @@ class rElectrum(App):
         add_wallet_widgets = []
         add_wallet_widgets.append(self.logo)
         add_wallet_widgets.append(self.qr_video)
-        add_wallet_widgets.append(self.qr_canvas)
         self.new_wallet_name = gui.TextInput(single_line=True, hint='Set wallet name', style={'font-size':'16px', 'text-align':'center', 'width': '70%', 'margin':'5px', 'padding':'5px 50px 5px 50px','color': 'black'})
         self.new_wallet_name.onchange.do(self.set_wallet_name)
         add_wallet_widgets.append(self.new_wallet_name)
-        self.qr_button_confirm.set_style({'color': 'black'})
-        add_wallet_widgets.append(gui.HBox(children=[self.qr_button_confirm, self.qr_button_cancel], style={'margin':'0px auto', 'width':'100%', 'background-color':'#1A222C'}))
-        self.qr_log = gui.Label("No Wallet Name", style={'font-size':'14px', 'width':'70%', 'text-align':'center', 'margin':'5px', 'padding':'5px 50px 5px 50px', 'color': '#A7A19F', 'border-width':'0.1px', 'border-style':'dashed'})
+        add_wallet_widgets.append(self.qr_button_cancel)
         add_wallet_widgets.append(self.qr_log)
+        self.qr_log.set_text('No Wallet Name')
         self.add_wallet_page = gui.VBox(children=add_wallet_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
 
     def set_wallet_name(self, widget, text):
         filename = self.new_wallet_name.get_value()
         if filename == '':
-            self.qr_button_confirm.set_style({'color': 'black'})
-            self.qr_button_confirm.onclick.do(None)
             self.qr_log.set_text('No Wallet Name')
             return
-
-        if not os.path.isfile('wallets/'+filename):
+        if not os.path.isfile(self.userdir+'/'+filename):
             self.qr_log.set_text('Filename is valid, scan Master Public Key')
-            self.qr_button_confirm.set_style({'color': 'white'})
-            self.qr_button_confirm.onclick.do(self.qr_snapshot, 'get_xpub_from_qr')
+            self.qr_snapshot('get_xpub_from_qr')
             return
         else:
             self.qr_log.set_text('Wallet already exists')
-            self.qr_button_confirm.onclick.do(None)
-            self.qr_button_confirm.set_style({'color': 'black'})
+            return
 
     def switch_to_add_wallet_page(self, widget):
         self.execute_javascript('document.getElementById("spinner").style.display=""')
         self.set_root_widget(self.add_wallet_page)
-        self.execute_javascript("""
-            const video = document.querySelector('video');
-            video.setAttribute("playsinline", true);
-            const canvas = document.querySelector('canvas');
-            navigator.mediaDevices.getUserMedia({video: { facingMode: { ideal: "environment" } }, audio: false}).
-                then((stream) => {video.srcObject = stream});
-        """)
         self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
     def main_page(self):
@@ -251,10 +237,6 @@ class rElectrum(App):
         if self.userdir != '':
             if len(self.wallets_list) != len(os.listdir(self.userdir)): # Repaint the main page every time there is a wallet change
                 self.main_page()
-                self.execute_javascript("""
-                    const video = document.querySelector('video');
-                    video.srcObject.getTracks()[0].stop();
-                """)
                 self.set_root_widget(self.wallet_list_page)
                 self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
@@ -481,23 +463,19 @@ class rElectrum(App):
         qr_to_address_widgets = []
         qr_to_address_widgets.append(self.logo)
         qr_to_address_widgets.append(self.qr_video)
-        qr_to_address_widgets.append(self.qr_canvas)
-        self.qr_button_confirm.onclick.do(self.qr_snapshot, 'get_address_from_qr')
-        qr_to_address_widgets.append(gui.HBox(children=[self.qr_button_confirm, self.qr_button_cancel], style={'margin':'0px auto', 'width':'100%', 'background-color':'#1A222C'}))
+        qr_to_address_widgets.append(self.qr_button_cancel)
+        qr_to_address_widgets.append(self.qr_log)
         qr_to_address_page = gui.VBox(children=qr_to_address_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
         self.set_root_widget(qr_to_address_page)
-        self.execute_javascript("""
-            const video = document.querySelector('video');
-            video.setAttribute("playsinline", true);
-            const canvas = document.querySelector('canvas');
-            navigator.mediaDevices.getUserMedia({video: { facingMode: { ideal: "environment" } }, audio: false}).
-                then((stream) => {video.srcObject = stream});
-        """)
+        self.qr_snapshot('get_address_from_qr')
         self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
-    def get_address_from_qr(self, img_data, filename):
+    def get_address_from_qr(self, **kwargs):
         self.execute_javascript('document.getElementById("spinner").style.display=""')
-        image = Image.open(io.BytesIO(img_data))
+        try:
+            image = Image.open(io.BytesIO(base64.b64decode(kwargs['image'])))
+        except:
+            return
         qr_code_list = decode(image)
         if len(qr_code_list)>0:
             qr_code_data = qr_code_list[0][0].decode('utf-8')
@@ -505,14 +483,17 @@ class rElectrum(App):
                 qr_code_data = qr_code_data[8:]
             if is_address(qr_code_data):
                 self.button_address.set_text(qr_code_data)
+                self.execute_javascript("""
+                    document.video_stop = true;
+            	    const video = document.querySelector('video');
+            	    video.srcObject.getTracks()[0].stop();
+        	""")
             else:
-                self.button_address.set_text('No valid Bitcoin address found')
+                self.qr_log.set_text('No valid Bitcoin address found')
+                return
         else:
-            self.button_address.set_text('No valid Bitcoin address found')
-        self.execute_javascript("""
-            const video = document.querySelector('video');
-            video.srcObject.getTracks()[0].stop();
-        """)
+            self.qr_log.set_text('No QR detected')
+            return
         self.set_root_widget(self.send_page)
         self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
@@ -540,43 +521,43 @@ class rElectrum(App):
         sign_tx_get_signed_widgets = []
         sign_tx_get_signed_widgets.append(self.logo)
         sign_tx_get_signed_widgets.append(self.qr_video)
-        sign_tx_get_signed_widgets.append(self.qr_canvas)
-        self.qr_button_confirm.onclick.do(self.qr_snapshot, 'sign_tx_send')
-        sign_tx_get_signed_widgets.append(gui.HBox(children=[self.qr_button_confirm, self.qr_button_cancel], style={'margin':'0px auto', 'width':'100%', 'background-color':'#1A222C'}))
+        sign_tx_get_signed_widgets.append(self.qr_button_cancel)
+        sign_tx_get_signed_widgets.append(self.qr_log)
         sign_tx_get_signed_page = gui.VBox(children=sign_tx_get_signed_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'})
         self.set_root_widget(sign_tx_get_signed_page)
-        self.execute_javascript("""
-            const video = document.querySelector('video');
-            video.setAttribute("playsinline", true);
-            const canvas = document.querySelector('canvas');
-            navigator.mediaDevices.getUserMedia({video: { facingMode: { ideal: "environment" } }, audio: false}).
-                then((stream) => {video.srcObject = stream});
-        """)
+        self.qr_snapshot('sign_tx_send')
         self.execute_javascript('document.getElementById("spinner").style.display="none"')
 
-    def sign_tx_send(self, img_data, filename):
-        self.execute_javascript('document.getElementById("spinner").style.display=""')
-        image = Image.open(io.BytesIO(img_data))
+    def sign_tx_send(self, **kwargs):
+        try:
+            image = Image.open(io.BytesIO(base64.b64decode(kwargs['image'])))
+        except:
+            return
         qr_code_list = decode(image)
         if len(qr_code_list)>0:
             signed_tx = qr_code_list[0][0].decode('utf-8')
         else:
-            None
-        self.execute_javascript("""
-            const video = document.querySelector('video');
-            video.srcObject.getTracks()[0].stop();
-        """)
-        tx_status=gui.Label('', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
+            self.qr_log.set_text('No QR detected')
+            return
+
         try:
+            self.execute_javascript('document.getElementById("spinner").style.display=""')
             tx_data = bh2u(base_decode(signed_tx, length=None, base=43))
             tx = Transaction(tx_from_str(tx_data))
             tx_valid = True
         except:
             tx_valid = False
+            return
 
+        if self.wallets_list[self.current_wallet].wallet.get_tx_info(tx).status != 'Signed':
+            self.qr_log.set_text('TX not signed')
+            return
+
+        tx_status=gui.Label('', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 20px 20px'})
         sign_tx_send_widgets = []
         sign_tx_send_widgets.append(self.logo)
         if tx_valid:
+            self.qr_log.set_text('Valid TX')
             summary_label=gui.Label('Summary of Signed TX', style={'font-size':'20px', 'margin': '5px 5px 0px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '20px 20px 0px 0px'})
             summary_text=gui.TextInput(height=300, style={'font-size':'12px', 'margin': '0px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px'})
 
@@ -615,13 +596,13 @@ class rElectrum(App):
             broadcast_button.onclick.do(self.broadcast_tx, tx)
             sign_tx_send_widgets.append(broadcast_button)
         else:
-            sign_tx_send_widgets.append(tx_status)
-            tx_status.set_text('Invalid TX or QR code')
-            tx_status.set_style({'background-color':'#F71200'})
-            scan_again=gui.Label('Scan Again', style={'font-size':'20px', 'text-align':'center','margin': '5px 5px 5px 5px','padding':'5px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#F71200', 'border-radius': '20px 20px 20px 20px'})
-            scan_again.onclick.do(self.sign_tx_get_signed)
-            sign_tx_send_widgets.append(scan_again)
+            return
 
+        self.execute_javascript("""
+            document.video_stop = true;
+            const video = document.querySelector('video');
+            video.srcObject.getTracks()[0].stop();
+        """)
         sign_tx_send_widgets.append(self.back_button)
         sign_tx_send_page = gui.VBox(children=sign_tx_send_widgets, style={'margin':'0px auto', 'background-color':'#1A222C'}) 
         self.set_root_widget(sign_tx_send_page)
