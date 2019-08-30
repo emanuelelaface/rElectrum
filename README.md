@@ -7,7 +7,7 @@ Many mobile browsers do not allow the use of the camera on an unsafe connection,
 ###  Dependencies
 
 - REMI for the GUI:
-<pip install remi>
+```pip install remi```
 
 - Electrum for the wallet:
 sudo apt-get install python3-pyqt5 python3-setuptools python3-pip
