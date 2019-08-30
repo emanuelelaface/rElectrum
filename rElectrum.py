@@ -26,10 +26,15 @@ from datetime import datetime
 
 unit = 1e8 # BTC
 
-#config = SimpleConfig({"testnet": False})
-#constants.set_mainnet()
-config = SimpleConfig({"testnet": True})
-constants.set_testnet()
+testnet = True
+
+if testnet:
+    config = SimpleConfig({"testnet": True})
+    constants.set_testnet()
+else:
+    config = SimpleConfig({"testnet": False})
+    constants.set_mainnet()
+
 daemon = Daemon(config, listen_jsonrpc=False)
 
 class rElectrum(App):
@@ -693,10 +698,16 @@ class rElectrum(App):
         info_id_2 = gui.Label(row.tx_details['id'][:len(row.tx_details['id'])//2], style={'font-size':'14px', 'margin': '0px 5px 0px 5px','padding':'5px 20px 0px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 0px 0px', 'text-decoration':'none'})
         info_id_3 = gui.Label(row.tx_details['id'][len(row.tx_details['id'])//2:], style={'font-size':'14px', 'margin': '0px 5px 5px 5px','padding':'0px 20px 5px 20px','color': 'white', 'width': '85%', 'background-color':'#24303F', 'border-radius': '0px 0px 20px 20px', 'text-decoration':'none'})
         info_id_2.type='a'
-        info_id_2.attributes['href']='https://blockstream.info/tx/'+row.tx_details['id']
+        if testnet:
+            info_id_2.attributes['href']='https://blockstream.info/testnet/tx/'+row.tx_details['id']
+        else:
+            info_id_2.attributes['href']='https://blockstream.info/tx/'+row.tx_details['id']
         info_id_2.attributes['target']='_blank'
         info_id_3.type='a'
-        info_id_3.attributes['href']='https://blockstream.info/tx/'+row.tx_details['id']
+        if testnet:
+            info_id_3.attributes['href']='https://blockstream.info/testnet/tx/'+row.tx_details['id']
+        else:
+            info_id_3.attributes['href']='https://blockstream.info/tx/'+row.tx_details['id']
         info_id_3.attributes['target']='_blank'
 
         tx_info_widgets.append(info_id_1)
