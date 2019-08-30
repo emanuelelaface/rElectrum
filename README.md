@@ -29,6 +29,8 @@ pip install pyzbar
 pip install qrcode[pil]
 ```
 
-<img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screen-shot-1.png></img>
-<img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screen-shot-2.png></img>
-<img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screen-shot-3.png></img>
+<img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screenshot1.png></img>
+<img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screenshot2.png></img>
+<img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screenshot3.png></img>
+<img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screenshot4.png></img>
+<img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screenshot5.png></img>
