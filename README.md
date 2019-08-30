@@ -12,16 +12,22 @@ pip install remi
 ```
 
 - Electrum for the wallet:
+```
 sudo apt-get install python3-pyqt5 python3-setuptools python3-pip
 wget https://download.electrum.org/3.3.8/Electrum-3.3.8.tar.gz
 python3 -m pip install --user Electrum-3.3.8.tar.gz[fast]
+```
 
 - pyzbar to read the QR codes:
+```
 sudo apt-get install libzbar0
 pip install pyzbar
+```
 
 - qrcode to generate the QR codes:
+```
 pip install qrcode[pil]
+```
 
 <img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screen-shot-1.png></img>
 <img src=https://github.com/emanuelelaface/rElectrum/blob/master/screenshots/screen-shot-2.png></img>
